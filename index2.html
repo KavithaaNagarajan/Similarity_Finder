@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Logo Finder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        select, button, input[type="file"] {
+            padding: 10px;
+            font-size: 16px;
+        }
+        .logos {
+            margin-top: 20px;
+        }
+        .logo-item {
+            margin-bottom: 10px;
+        }
+        img {
+            max-width: 200px;
+            display: block;
+        }
+        .logo-info {
+            margin-top: 5px;
+            font-size: 14px;
+            color: gray;
+        }
+        .message {
+            margin-top: 20px;
+        }
+        .csv-table {
+            margin-top: 30px;
+            display: none;
+        }
+        .csv-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .csv-table th, .csv-table td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Select a University to Find Logos</h1>
+    <form id="university-form">
+        <label for="university">Choose a University:</label>
+        <select id="university" name="university_name">
+            <option value="">Select a University</option>
+            {% for university in universities %}
+                <option value="{{ university }}">{{ university }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Find Logos</button>
+    </form>
+
+    <div class="logos" id="logos"></div>
+
+    <h2>Upload a New Logo for Processing</h2>
+    <form id="upload-form" enctype="multipart/form-data">
+        <label for="logo">Choose an Image to Upload:</label>
+        <input type="file" name="logo" id="logo" required>
+        <button type="submit">Upload and Process</button>
+    </form>
+
+    <div class="message" id="upload-message"></div>
+
+    <!-- Section for displaying CSV Results -->
+    <div class="csv-table" id="csv-table">
+        <h2>Cosine Similarity and SSIM Results</h2>
+        <table id="csv-results">
+            <thead>
+                <tr>
+                    <th>Detected Filename</th>
+                    <th>Saved Filename</th>
+                    <th>Cosine Similarity</th>
+                    <th>SSIM Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be inserted dynamically -->
+            </tbody>
+        </table>
+        <a href="/static/Cosine_score.csv" class="btn btn-success" download>Download CSV</a>
+    </div>
+
+    <script>
+        // Handle logo selection and display logos
+        document.getElementById('university-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            let universityName = document.getElementById('university').value;
+            
+            if (!universityName) {
+                alert("Please select a university.");
+                return;
+            }
+
+            fetch('/get_logos', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'university_name=' + encodeURIComponent(universityName)
+            })
+            .then(response => response.json())
+            .then(data => {
+                let logosDiv = document.getElementById('logos');
+                logosDiv.innerHTML = '';  // Clear previous logos
+                
+                if (data.length === 0) {
+                    logosDiv.innerHTML = '<p>No logos found for this university.</p>';
+                } else {
+                    data.forEach(function(logo) {
+                        let logoElement = document.createElement('div');
+                        logoElement.classList.add('logo-item');
+                        logoElement.innerHTML = `
+                            <img src="${logo.file_path}" alt="Logo">
+                            <div class="logo-info">Filename: ${logo.filename}</div>
+                        `;
+                        logosDiv.appendChild(logoElement);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("An error occurred while fetching logos.");
+            });
+        });
+
+        // Handle image upload and process
+        document.getElementById('upload-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            
+            let formData = new FormData(this);
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                let messageDiv = document.getElementById('upload-message');
+                if (data.error) {
+                    messageDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                } else {
+                    messageDiv.innerHTML = `<p style="color: green;">${data.message}</p>`;
+
+                    // Show the CSV results after the upload is complete
+                    document.getElementById('csv-table').style.display = 'block';
+                    loadCSVData();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("An error occurred during the upload.");
+            });
+        });
+
+        // Function to load and display the CSV data
+        function loadCSVData() {
+            fetch('/static/Cosine_score.csv')
+                .then(response => response.text())
+                .then(data => {
+                    const lines = data.split('\n');
+                    let tableContent = '';
+                    for (let i = 1; i < lines.length; i++) {  // Skip the header line
+                        const row = lines[i].split(',');
+                        if (row.length === 4) {
+                            tableContent += `
+                                <tr>
+                                    <td>${row[0]}</td>
+                                    <td>${row[1]}</td>
+                                    <td>${row[2]}</td>
+                                    <td>${row[3]}</td>
+                                </tr>
+                            `;
+                        }
+                    }
+                    document.querySelector('#csv-results tbody').innerHTML = tableContent;
+                })
+                .catch(error => {
+                    console.error('Error loading CSV data:', error);
+                    alert('Failed to load CSV data.');
+                });
+        }
+    </script>
+
+</body>
+</html>
